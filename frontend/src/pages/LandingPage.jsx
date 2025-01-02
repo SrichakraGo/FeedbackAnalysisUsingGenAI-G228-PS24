@@ -51,36 +51,48 @@ export default function LandingPage() {
     setOverallSentiment('');
     setSummary('');
 
-    const userEmail = localStorage.getItem('userEmail');
-
     try {
-      const response = await axios.post('http://localhost:5000/scrape', {
-        productUrl: url
-      });
+        // First, get the analysis results
+        const response = await axios.post('http://localhost:5000/scrape', {
+            productUrl: url
+        });
 
-      // Store search data with user email
-      await axios.post('http://localhost:5005/api/search-history', {
-        userEmail: userEmail,
-        searchUrl: url,
-        searchResponse: response.data
-      }, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        // If user is logged in, store the search history
+        const userEmail = localStorage.getItem('userEmail');
+        const token = localStorage.getItem('token');
+        
+        if (userEmail && token) {
+            try {
+                await axios.post('http://localhost:5005/api/search-history', {
+                    userEmail: userEmail,
+                    searchUrl: url,
+                    searchResponse: response.data
+                }, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+            } catch (historyError) {
+                console.log('Failed to save search history:', historyError);
+                // Continue with displaying results even if history save fails
+            }
         }
-      });
 
-      setReviews(response.data.reviews);
-      setKeyphrases(response.data.keyphrases);
-      setOverallSentiment(response.data.overall_sentiment);
-      setSummary(response.data.summary);
-      setMessage(response.data.message || `Successfully analyzed ${response.data.total_reviews} reviews.`);
+        // Display results regardless of login status
+        setReviews(response.data.reviews);
+        setKeyphrases(response.data.keyphrases);
+        setOverallSentiment(response.data.overall_sentiment);
+        setSummary(response.data.summary);
+        setMessage(response.data.message || `Successfully analyzed ${response.data.total_reviews} reviews.`);
+
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Failed to analyze reviews. Please try again.';
-      setMessage(errorMessage);
+        const errorMessage = error.response?.data?.message || 'Failed to analyze reviews. Please try again.';
+        setMessage(errorMessage);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+};
+
 
   return (
     <div className="bg-gray-50">
