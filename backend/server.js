@@ -8,7 +8,6 @@ dotenv.config({ path: '../.env' });
 
 
 
->>>>>>> 27a739fc671824d67a36a52f290999a3a3e8a818
 // Models
 const User = require('./models/User');
 

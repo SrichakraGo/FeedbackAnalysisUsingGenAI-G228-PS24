@@ -20,11 +20,18 @@ from statistics import mode
 import requests
 from dotenv import load_dotenv
 import os
+from datetime import datetime, timedelta
+import pymongo
 
 load_dotenv()
 app = Flask(__name__)
 CORS(app)
 warnings.filterwarnings("ignore", category=ResourceWarning)
+
+# MongoDB Connection
+mongo_client = pymongo.MongoClient("mongodb://localhost:27017/")
+db = mongo_client["Feedback_Analysis"]
+search_history = db["searchhistories"]
 
 nlp = spacy.load("en_core_web_sm")
 tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
@@ -33,6 +40,22 @@ bert_model = AutoModel.from_pretrained("bert-base-uncased")
 API_TOKEN = os.getenv("HF_API_TOKEN")
 API_URL = os.getenv("API_URL")
 headers = {"Authorization": f"Bearer {API_TOKEN}"}
+
+
+def check_cached_results(product_url):
+    cached_result = search_history.find_one(
+        {"searchUrl": product_url}, sort=[("timestamp", pymongo.DESCENDING)]
+    )
+
+    if cached_result:
+        cache_time = cached_result["timestamp"]
+        current_time = datetime.utcnow()
+        one_month_ago = current_time - timedelta(days=30)
+
+        if cache_time > one_month_ago:
+            return cached_result["searchResponse"]
+
+    return None
 
 
 def generate_review_summary(reviews):
@@ -131,7 +154,7 @@ def setup_browser():
     options.add_argument("--no-sandbox")
     options.add_argument("--window-size=1920,1080")
     options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     )
     return uc.Chrome(options=options)
 
@@ -291,6 +314,18 @@ def scrape():
         return jsonify({"status": "error", "message": "No product URL provided"}), 400
 
     try:
+        # Check cache first
+        cached_results = check_cached_results(product_url)
+        if cached_results:
+            return jsonify(
+                {
+                    "status": "success",
+                    "message": "Retrieved from cache",
+                    "cached": True,
+                    **cached_results,
+                }
+            )
+
         browser = setup_browser()
         reviews = get_reviews_ratings(browser, product_url)
         reviews_df = pd.DataFrame(reviews)
